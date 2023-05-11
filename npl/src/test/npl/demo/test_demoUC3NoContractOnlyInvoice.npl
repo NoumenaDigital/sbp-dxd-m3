@@ -1,0 +1,46 @@
+package demo
+
+use sbp.Invoice
+use sbp.Offer
+use sbp.Participant
+use sbp.SBP
+use support.Amount
+use support.CCY
+use support.ParticipantFactory
+use support.default
+use support.pBuyer1
+use support.pSBP
+use support.pSupplier1
+
+@test
+function demoUC3NoContractOnlyInvoice(test: Test) returns Unit -> {
+
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier1: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+    var buyer1: Participant = participantFactory.create[pBuyer1](participantDetails.with(name = "Buyer1"));
+
+    //supplier1 add a new invoice (manually until we interface with ERP) that he wants to trade
+    var invoice: Invoice = supplier1.createNewInvoice[pSupplier1](
+        "123456",
+        Amount(10000, CCY.EUR),
+        participantDetails.paymentDetails,
+        default().customerDetails,
+        2023-10-12T12:00Z,
+        2021-10-12T12:00Z,
+        "description",
+        true,
+        optionOf<Amount>()
+    );
+    invoice.setBlockChainRef[pSBP]("invoiceHash1");
+    invoice.finaliseInvoice[pSBP]();
+
+    var openOffers: Set<Offer> = sbp.getOpenOffers[pSBP]();
+    var offer: Offer = openOffers.toList().get(0);
+
+    test.assertEquals(offer.states.open, offer.currentState, "offer should be open");
+    buyer1.buyOffer[pBuyer1](offer);
+    test.assertEquals(offer.states.bought, offer.currentState, "offer should be bought");
+};

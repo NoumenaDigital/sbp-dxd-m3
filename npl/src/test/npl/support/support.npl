@@ -1,0 +1,36 @@
+package support
+
+use sbp.Milestone
+use sbp.Participant
+use sbp.SBP
+
+const pSBP: Party = 'SBP';
+const pSupplier1: Party = 'Supplier 1';
+const pBuyer1: Party = 'Buyer 1';
+
+struct ParticipantDetails {
+    name: Text,
+    surname: Text,
+    mail: Text,
+    paymentDetails: PaymentDetails,
+    accountHash: Text
+};
+
+protocol[pSBP] ParticipantFactory(var sbp: SBP) {
+    permission[*pParticipant] create(details: ParticipantDetails) returns Participant {
+        return Participant[pSBP, pParticipant](
+            name = details.name,
+            surname = details.surname,
+            mail = details.mail,
+            paymentDetails = details.paymentDetails,
+            sbp = sbp,
+            accountHash = details.accountHash
+        );
+    };
+};
+
+function findMilestoneByName(milestones: List<Milestone>, name: Text) returns Milestone -> {
+    return milestones
+        .findFirstOrNone(function(m: Milestone) returns Boolean -> { return m.name == name; })
+        .getOrFail();
+}

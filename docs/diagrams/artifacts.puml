@@ -1,0 +1,54 @@
+@startuml
+allowmixing
+
+skinparam nodesep 100 
+
+
+json "Original Invoice" as original {
+    "payee_name": "Supplier",
+    "payee_iban": "NL64 ABNC 0417 1643 00",
+    "supplier_name": "Supplier",
+    "supplier_kvk": "77614798",
+    "invoice_number": "12345",
+    "payable_amount": "CHF 40.00",
+    "customer_name": "Customer"
+}
+
+json "Ceded Invoice" as ceded {
+    "payee_name": "Buyer",
+    "payee_iban": "CH93 00762 011623852957",
+    "supplier_name": "Supplier",
+    "supplier_kvk": "77614798",
+    "invoice_number": "12345",
+    "payable_amount": "CHF 40.00",
+    "customer_name": "Customer"
+}
+
+package "Verification" {
+
+    control "Create verifyable invoice" as create
+
+    file "DID" <<Blockchain>> as did
+    collections "Claims" <<IPFS>> as claims
+
+    did "1" . "0..n" claims
+}
+
+create <-- original
+create <-- ceded : "referencing\noriginal"
+create -> did
+
+package "Trading" {
+    control "Generate ceded invoice" as trade
+}
+
+original --> trade
+ceded <-- trade
+
+package "Smart Billing" {
+    control "Track milestone" as milestone 
+}
+
+milestone --> original : "generates\none or more\ninvoices"
+
+@enduml 

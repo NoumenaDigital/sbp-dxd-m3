@@ -1,0 +1,96 @@
+package demo
+
+use sbp.Contract
+use sbp.Invoice
+use sbp.Offer
+use sbp.Participant
+use sbp.SBP
+use support.Amount
+use support.CCY
+use support.MilestoneDetails
+use support.ParticipantFactory
+use support.default
+use support.findMilestoneByName
+use support.pBuyer1
+use support.pSBP
+use support.pSupplier1
+
+@test
+function demoUC3(test: Test) returns Unit -> {
+
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier1: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+    var buyer1: Participant = participantFactory.create[pBuyer1](participantDetails.with(name = "Buyer1"));
+
+    var customerDetails1 = default().customerDetails;
+
+    test.setTime(2022-09-10T12:00Z);
+
+    var mDetails1 = default().milestoneDetails.with(name = "Test milestone 1", invoiceToTrade = true, description = "reached at shipment time");
+    var mDetails2 = default().milestoneDetails.with(name = "Test milestone 2", invoiceToTrade = true, description = "reached at delivery");
+
+    // supplier1 add a new contract with customer1
+    var contract: Contract = supplier1.createContract[pSupplier1](
+        "1234",
+        CCY.EUR,
+        "Contract for goods delivery",
+        now(),
+        Amount(10000, CCY.EUR),
+        listOf<MilestoneDetails>(mDetails1, mDetails2),
+        customerDetails1,
+        2022-10-12T12:00Z
+    );
+
+    var m1 = findMilestoneByName(contract.milestones, "Test milestone 1");
+    var m2 = findMilestoneByName(contract.milestones, "Test milestone 2");
+
+    var m2OfferAmount = m2.offerAmount;
+    debug(m2OfferAmount.toText() + "This is the amount that will be set in the offer");
+
+    m2.changeTreadable[pSupplier1](false);
+    contract.finaliseCreation[pSupplier1](2022-11-12T12:00Z);
+
+    test.setTime(2022-09-20T12:00Z);
+
+    m1.milestoneReached[pSupplier1]();
+    var invoiceM1: Invoice = m1.createOriginalInvoice[pSBP](
+        "12345",
+        Amount(5000, CCY.EUR),
+        participantDetails.paymentDetails,
+        customerDetails1,
+        m1.originalPaymentDeadline.getOrFail(),
+        now(),
+        "reached at shipment time"
+    );
+    invoiceM1.setBlockChainRef[pSBP]("invoiceHash1");
+    invoiceM1.finaliseInvoice[pSBP]();
+
+    var openOffers: Set<Offer> = sbp.getOpenOffers[pSBP]();
+    var offer: Offer = openOffers.toList().get(0);
+    buyer1.buyOffer[pBuyer1](offer);
+
+    test.assertEquals(offer.states.bought, offer.currentState, "offer should be bought");
+
+    test.setTime(2022-10-12T12:00Z);
+
+    m2.milestoneReached[pSupplier1]();
+    var invoiceM2: Invoice = m2.createOriginalInvoice[pSBP](
+        "12346",
+        Amount(5000, CCY.EUR),
+        participantDetails.paymentDetails,
+        customerDetails1,
+        m2.originalPaymentDeadline.getOrFail(),
+        now(),
+        "reached at delivery"
+    );
+    invoiceM2.setBlockChainRef[pSBP]("invoiceHash2");
+    invoiceM2.finaliseInvoice[pSBP]();
+
+    test.setTime(2023-01-11T11:00Z);
+    invoiceM2.pay[pSBP]();
+
+    test.assertEquals(invoiceM2.states.paid, invoiceM2.currentState, "invoice should be paid");
+};

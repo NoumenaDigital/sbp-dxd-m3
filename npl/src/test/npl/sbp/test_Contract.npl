@@ -1,0 +1,78 @@
+package sbp
+
+use support.Amount
+use support.CCY
+use support.MilestoneDetails
+use support.ParticipantFactory
+use support.default
+use support.pSBP
+use support.pSupplier1
+
+@test
+function testContractCreation(test: Test) -> {
+    // given
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var participant: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    var mDetails1 = default().milestoneDetails.with(name = "Test milestone 1", description = "reached at shipment time");
+    var mDetails2 = default().milestoneDetails.with(name = "Test milestone 2", description = "reached at delivery");
+
+    // when
+    var contract: Contract = participant.createContract[pSupplier1](
+        "1234",
+        CCY.EUR,
+        "Contract for goods delivery",
+        now(),
+        Amount(10000, CCY.EUR),
+        listOf<MilestoneDetails>(mDetails1, mDetails2),
+        default().customerDetails,
+        now().plus(months(1))
+    );
+
+    // then
+    test.assertEquals(contract.activeState(), contract.initialState(), "The contract is created in the correct state");
+    test.assertTrue(participant.contracts.contains(contract), "The contract has not been added to the supplier");
+    for (m in contract.milestones) {
+        test.assertEquals(m.contract.getOrFail(), contract, "The contract has not been registered on the milestone");
+    };
+};
+
+@test
+function contractCreationFailsNoMilestones(test: Test) -> {
+    // given
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var participant: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    var emptyMilestones = listOf<MilestoneDetails>();
+
+    // then
+    var failMsg: Text = test.assertFailsWith(
+        // when
+        function() returns Contract ->
+            participant.createContract[pSupplier1](
+            "1234",
+            CCY.EUR,
+            "Contract for goods delivery",
+            now(),
+            Amount(10000, CCY.EUR),
+            emptyMilestones,
+            default().customerDetails,
+            now().plus(months(1))
+        ),
+        14,
+        "The contract creation should fail, since there are no Milestones present"
+    );
+
+    // and
+    test.assertEquals(
+        "R14: Assertion 'Goods value is not properly split in milestones.' failed ('/sbp/Participant/createContract/Goods value is not properly split in milestones.')",
+        failMsg,
+        "unexpected error message"
+    );
+};

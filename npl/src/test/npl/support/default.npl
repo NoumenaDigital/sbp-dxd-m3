@@ -1,0 +1,69 @@
+package support
+
+struct Default {
+    milestoneDetails: MilestoneDetails,
+    customerDetails: CustomerDetails,
+    invoiceDetails: InvoiceDetails,
+    participantDetails: ParticipantDetails,
+    paymentDetails: PaymentDetails
+};
+
+function default() returns Default -> {
+    return Default(
+        milestoneDetails = private_DefaultMilestoneDetails(),
+        customerDetails = private_DefaultCustomerDetails(),
+        invoiceDetails = private_DefaultInvoiceDetails(),
+        participantDetails = private_DefaultParticipantDetails(),
+        paymentDetails = private_DefaultPaymentDetails()
+    );
+};
+
+function private_DefaultMilestoneDetails() returns MilestoneDetails -> {
+    return MilestoneDetails(
+        name = "name",
+        amount = Amount(5000, CCY.EUR),
+        description = "description",
+        timeToPay = months(3),
+        invoiceToTrade = false,
+        offerAmount = optionOf<Amount>(Amount(4500, CCY.EUR)),
+        dateCreated = 2022-11-12T12:00Z
+    );
+};
+
+function private_DefaultCustomerDetails() returns CustomerDetails -> {
+    return CustomerDetails(
+        name = "Customer1",
+        address = "C1 street"
+    );
+};
+
+function private_DefaultInvoiceDetails() returns InvoiceDetails -> {
+    return InvoiceDetails(
+        invoiceNumber = "123456",
+        amount = Amount(10000, CCY.EUR),
+        creditorData = private_DefaultPaymentDetails(),
+        debtorData = private_DefaultCustomerDetails(),
+        deadLine = 2023-10-12T12:00Z,
+        issueDate = 2021-10-12T12:00Z,
+        description = "description",
+        bcId = optionOf("invoiceHash1")
+    );
+};
+
+function private_DefaultParticipantDetails() returns ParticipantDetails -> {
+    return ParticipantDetails(
+        name = "name",
+        surname = "surname",
+        mail = "me@mail.com",
+        paymentDetails = private_DefaultPaymentDetails(),
+        accountHash = "UVMULMCLn3JKDj36My6g36LE8bQZnjQRYwrjiXm2KFXhL1Z"
+    );
+};
+
+function private_DefaultPaymentDetails() returns PaymentDetails -> {
+    return PaymentDetails(
+        iban = "ZZ0000000000000001",
+        name = "Supplier 1",
+        address = "Supplier 1, Address 1111"
+    );
+};

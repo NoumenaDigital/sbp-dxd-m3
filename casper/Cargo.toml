@@ -1,0 +1,6 @@
+[workspace]
+members = ["did_registry", "tests", "did_common"]
+
+[profile.release]
+codegen-units = 1
+lto = true

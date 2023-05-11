@@ -1,0 +1,40 @@
+@startuml
+
+file UBL
+file PDF
+
+
+note left of UBL
+Standardized XML
+format
+end note
+
+package "Blockchain" as bc{
+    file DID
+
+    note right of DID
+    DID lives on the
+    blockchain and represents
+    identity of the SBP (or Supplier)
+    end note
+}
+
+package "IPFS" as ipfs {
+    file VC
+
+    note right of VC
+    VC contains the actual data
+    and lives on IPFS. Integrity
+    of the VC is guaranteed by
+    signature of the SBP's DID
+    end note
+}
+
+
+
+DID .> VC : "verify"
+UBL - PDF : identical
+UBL --> VC : "generates"
+
+
+@enduml 
