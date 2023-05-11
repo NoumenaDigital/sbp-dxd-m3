@@ -1,0 +1,91 @@
+package demo
+
+use sbp.Contract
+use sbp.Invoice
+use sbp.Milestone
+use sbp.Offer
+use sbp.Participant
+use sbp.SBP
+use support.Amount
+use support.CCY
+use support.MilestoneDetails
+use support.ParticipantFactory
+use support.default
+use support.findMilestoneByName
+use support.pSBP
+use support.pSupplier1
+
+@test
+function demoUC3UpdateQueryPrice(test: Test) returns Unit -> {
+
+    test.setTime(2022-07-06T12:00Z);
+
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+    var participantDetails = default().participantDetails;
+
+    var supplier: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    var customerDetails1 = default().customerDetails;
+
+    var mDetails1 = default().milestoneDetails.with(name = "TelecomContract#1#M1", amount = Amount(17000, CCY.EUR), description = "Shipped", invoiceToTrade = true, offerAmount = optionOf<Amount>(Amount(8500, CCY.EUR)));
+    var mDetails2 = default().milestoneDetails.with(name = "TelecomContract#1#M2", amount = Amount(8500, CCY.EUR), description = "Delivered", invoiceToTrade = true, offerAmount = optionOf<Amount>());
+    var mDetails3 = default().milestoneDetails.with(name = "TelecomContract#1#M3", amount = Amount(8500, CCY.EUR), description = "Accepted", invoiceToTrade = true, offerAmount = optionOf<Amount>());
+
+    var contract: Contract = supplier.createContract[pSupplier1](
+        "TelecomContract#1",
+        CCY.EUR,
+        "Contract Name",
+        now(),
+        Amount(34000, CCY.EUR),
+        listOf<MilestoneDetails>(mDetails1, mDetails2, mDetails3),
+        customerDetails1,
+        2022-07-30T12:00Z
+    );
+
+    contract.finaliseCreation[pSupplier1](now());
+
+    var m1: Milestone = findMilestoneByName(contract.milestones, "TelecomContract#1#M1");
+    m1.updateOfferAmount[pSupplier1](Amount(2000, CCY.EUR));
+    m1.milestoneReached[pSupplier1]();
+
+    var invoiceM1: Invoice = m1.createOriginalInvoice[pSBP](
+        "TelecomContract#1#M1#id#",
+        m1.amount,
+        contract.supplier.paymentDetails,
+        contract.customerDetails,
+        m1.originalPaymentDeadline.getOrFail(),
+        m1.dateCompleted.getOrFail(),
+        m1.description);
+
+    invoiceM1.setBlockChainRef[pSBP]("HASH from Milestone.createOriginalInvoice notification representInvoiceOnBlockchain");
+    invoiceM1.finaliseInvoice[pSBP]();
+
+    var offerM1: Offer = invoiceM1.getOffer[pSupplier1]().getOrFail();
+    test.assertEquals(offerM1.amount, Amount(2000, CCY.EUR), "offer price should have been updated");
+
+    /*
+    Find the invoice for the second milestone
+    1. Lookup the milestone
+    2. Set the milestone to  reached
+    4. Trigger the generation of an offer
+    5. Use the invoice to get the offer, see if there's a default offer price applied as the milestone didn't have one set
+    */
+    var m2: Milestone = findMilestoneByName(contract.milestones, "TelecomContract#1#M2");
+    m2.milestoneReached[pSupplier1]();
+    var invoiceM2: Invoice = m2.createOriginalInvoice[pSBP](
+        "12345",
+        m2.amount,
+        supplier.paymentDetails,
+        customerDetails1,
+        m1.originalPaymentDeadline.getOrFail(),
+        now(),
+        m2.description
+    );
+    invoiceM2.finaliseInvoice[pSBP]();
+
+    var offerM2: Offer = invoiceM2.getOffer[pSupplier1]().getOrFail();
+    test.assertEquals(offerM2.amount, Amount(7650, CCY.EUR), "offer should have default price applied");
+
+    info("Functional test running through to the end OK");
+};

@@ -1,0 +1,120 @@
+package sbp
+
+use support.Amount
+use support.CustomerDetails
+use support.PaymentDetails
+
+// This protocol represents a Milestone
+// A Milestone is a payable deliverable associated with an overall Contract.
+protocol[pSupplier, pSBP] Milestone(
+    var name: Text,
+    var amount: Amount,
+    var description: Text,
+    var timeToPay: Period,
+    var invoiceToTrade: Boolean,
+    var offerAmount: Option<Amount>,
+    var dateCreated: DateTime
+) {
+    var contract: Option<Contract> = optionOf<Contract>();
+    var originalInvoice: Option<Invoice> = optionOf<Invoice>();
+    var originalPaymentDeadline: Option<DateTime> = optionOf<DateTime>();
+    var dateCompleted: Option<DateTime> = optionOf<DateTime>();
+
+    initial state created;
+    state reached;
+    final state closed;
+
+    permission[pSupplier] registerContract(c: Contract) {
+        contract = optionOf<Contract>(c);
+        invoiceToTrade = invoiceToTrade ;
+    };
+
+    // Permission to set an offer amount when the milestone is created
+    // (and which will be used to set the offer price when/if an offer is created )
+    // Only possible whilst a milestone is in the created state, i.e. neither reached nor closed
+    // (Guard) Checks only possible if the invoice is to be traded
+    @api
+    permission[pSBP | pSupplier] updateOfferAmount(newOfferAmount: Amount) | created {
+        guard(invoiceToTrade, "The invoice needs to be tradeable to set an offer price.");
+        this.offerAmount = optionOf(newOfferAmount);
+    };
+
+    // Change the treadable state is possible only before the milestone is reached.
+    // Afterwards, the invoice already took different pathes
+    permission[pSupplier] changeTreadable(t: Boolean) | created {
+        this.invoiceToTrade = t;
+    };
+
+    @api
+    permission[pSupplier] milestoneReached() | created {
+        guard(contract.getOrFail().currentState == contract.getOrFail().states.creationFinalised, "The contract has not been finalised yet.");
+
+        originalPaymentDeadline = optionOf(now().plus(timeToPay));
+        dateCompleted = optionOf(now());
+
+        become reached;
+    };
+
+    function correctInvoiceData(
+        amount: Amount,
+        creditorData: PaymentDetails,
+        debtorData: CustomerDetails,
+        deadLine: DateTime,
+        freeTextDescription: Text
+    ) returns Boolean -> {
+        return amount == this.amount &&
+            creditorData == this.contract.getOrFail().supplierDetails &&
+            debtorData == this.contract.getOrFail().customerDetails &&
+            deadLine == this.originalPaymentDeadline.getOrFail() &&
+            freeTextDescription == this.description;
+    };
+
+    @api
+    permission[pSBP] createOriginalInvoice(
+        invoiceNumber: Text,
+        amount: Amount,
+        creditorData: PaymentDetails,
+        debtorData: CustomerDetails,
+        deadLine: DateTime,
+        issueDate: DateTime,
+        freeTextDescription: Text
+    ) returns Invoice {
+        guard(correctInvoiceData(amount, creditorData, debtorData, deadLine, freeTextDescription),
+            "The data in the original generated invoice are not correct.");
+
+        var i = Invoice[pSBP, pSupplier](
+            optionOf<Milestone>(this),
+            contract.getOrFail().supplier,
+            invoiceNumber,
+            amount,
+            creditorData,
+            debtorData,
+            deadLine,
+            issueDate,
+            this.invoiceToTrade,
+            this.offerAmount,
+            freeTextDescription
+        );
+
+        originalInvoice = optionOf(i);
+
+        return i;
+    };
+
+    permission[pSupplier | pSBP] closeMilestone() | reached {
+        var aContract = contract.getOrFail();
+        var allContractMilestonesAreClosed = aContract.milestones.allMatch(stateIsClosed);
+
+        if (allContractMilestonesAreClosed) {
+            aContract.closeContract[pSupplier]();
+        };
+
+        become closed;
+    };
+
+    function stateIsClosed(m: Milestone) returns Boolean -> {
+        return m.currentState == m.states.closed;
+    };
+};
+
+

@@ -1,0 +1,16 @@
+[package]
+name = "did_registy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+casper-contract = {version = "1.4.4", features = ["test-support"]}
+casper-types = "1.5.0"
+common = { path = "../did_common" }
+
+[[bin]]
+name = "did_registry"
+path = "src/main.rs"
+bench = false
+doctest = false
+test = false

@@ -1,0 +1,167 @@
+version: "2.4"
+
+volumes:
+  keycloak-db: { }
+
+services:
+
+  api:
+    image: ghcr.io/noumenadigital/sbp-dxd/api:latest
+    build:
+      context: api
+    ports:
+      - "8080:8080"
+      - "8000:8000"
+      - "8888:8888"
+    environment:
+      KEYCLOAK_URL: http://keycloak:11000
+      ENGINE_URL: http://engine:12000
+      READ_MODEL_URL: http://read-model:15000
+      HTTP_PORT: 8080
+      HTTP_ADMIN_PORT: 8000
+      IPFS_ENDPOINT: ${IPFS_ENDPOINT:-https://ipfs.infura.io:5001}
+      INFURA_IPFS_PROJECT_ID: ${INFURA_IPFS_PROJECT_ID:-2GaS109tcMuN7KcfAwezGeIJ5rB}
+      INFURA_IPFS_PROJECT_SECRET: ${INFURA_IPFS_PROJECT_SECRET:-998fafd7e3e25d387739441385c71381}
+      PRIVATE_KEY_SBP: MC4CAQAwBQYDK2VwBCIEIFNLBsagBqDpb254CAmo4TnkPi1uCPqICi7pu3xVHzlX
+      PUBLIC_KEY_SBP: MCowBQYDK2VwAyEA2SyvRZj27pEKXuuhJIXSG4l9Qxjt9Krpmw0avvFdHDI=
+      ACCOUNT_HASH_SBP: e5e3607a0925a715429f08d12e82bcf8f996b8113857034fff8a66a067ddd3b3
+      PRIVATE_KEY_USER_1: MC4CAQAwBQYDK2VwBCIEIDUq8MTGOWZ9XHMBeGPFElvwULGUg9aj5maPTv3YKiHd
+      PUBLIC_KEY_USER_1: MCowBQYDK2VwAyEAxxCaPVAtYtgvK4FsuYVi82xtN4+hyd81vWACqJhrGM8=
+      ACCOUNT_HASH_USER_1: d6c48c5c2378e30905bb7916cde5fe5fcae082a0e3eb5093d7435cc7c800bee7
+      PRIVATE_KEY_USER_2: MC4CAQAwBQYDK2VwBCIEIO9We+5WrQPfz3YiVBRPArwOKqH+QuYZRoZ5xdfkMs7p
+      PUBLIC_KEY_USER_2: MCowBQYDK2VwAyEAMPaSs8laS9yWr4u9y3OUqf/l26f+72O9QYUMUPyk8aU=
+      ACCOUNT_HASH_USER_2: 12d91f30f0bc5dbc7d859040f1bd54a9cc2f76fdfa1bee42b0ca92eeed312eb2
+      PRIVATE_KEY_USER_3: MC4CAQAwBQYDK2VwBCIEINHPsohLk/Ijt59+rboz0YB0nm+EYWcnoVDHZxIH+UY7
+      PUBLIC_KEY_USER_3: MCowBQYDK2VwAyEAP7NLRp1Ll7MDyspv20jT/nBmGYrBKY49mvQDjxziY5w=
+      ACCOUNT_HASH_USER_3: 4af7048197bc3f13f8be2d705335f9a291a0905cb0d2505d87962e8ed5aa5dab
+      DID_METHOD: ${DID_METHOD:-cspr}
+      CASPER_NODE_URL: ${CASPER_NODE_URL:-http://136.243.187.84}
+      CASPER_NODE_PORT: ${CASPER_NODE_PORT:-7777}
+      CASPER_CHAIN_NAME: ${CASPER_CHAIN_NAME:-casper-test}
+      SBP_SYSTEM_USER: "sbp"
+      SBP_SYSTEM_PASSWORD: "sbp"
+      MASTER_REALM: "master"
+      MASTER_CLIENT_ID: "admin-cli"
+      KEYCLOAK_ADMIN_USER: "admin"
+      KEYCLOAK_ADMIN_PASSWORD: "Sbp123!"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:80,http://localhost"
+      INCLUDE_IPFS: ${INCLUDE_IPFS:-true}
+      DISABLE_CONTRACT_ENDPOINTS: ${DISABLE_CONTRACT_ENDPOINTS:-false}
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8888
+      ACCESS_LOG_VERBOSITY: "MAX"
+    healthcheck:
+      test: curl localhost:8000/health || exit 1
+      interval: 1s
+      retries: 60
+    depends_on:
+      keycloak-provisioning:
+        condition: service_completed_successfully
+      engine:
+        condition: service_healthy
+      read-model:
+        condition: service_started
+
+  engine:
+    image: ghcr.io/noumenadigital/sbp-dxd/engine:latest
+    build:
+      context: npl
+    ports:
+      - "12000:12000"
+    environment:
+      ENGINE_DB_URL: "jdbc:postgresql://engine-db:5432/engine"
+      ENGINE_DB_USER: sbp
+      ENGINE_DB_PASSWORD: secret
+      ENGINE_AUTH_SERVER_BASE_URL: http://keycloak:11000
+      ENGINE_DB_POSTGRAPHILE_USER: postgraphile
+      ENGINE_DB_POSTGRAPHILE_PASSWORD: postgraphile
+    healthcheck:
+      test: curl -f localhost:12000/actuator/health || exit 1
+      interval: 1s
+      retries: 60
+    depends_on:
+      engine-db:
+        condition: service_started
+      keycloak-provisioning:
+        condition: service_completed_successfully
+
+  read-model:
+    image: ghcr.io/noumenadigital/packages/postgraphile:2023.1.7
+    environment:
+      POSTGRAPHILE_PORT: 15000
+      POSTGRAPHILE_DB_URL: postgres://sbp:secret@engine-db:5432/engine
+      POSTGRAPHILE_DB_USER: postgraphile
+      POSTGRAPHILE_DB_SCHEMA: noumena
+      POSTGRAPHILE_TRUSTED_ISSUERS: "http://keycloak:11000/**,"
+      POSTGRAPHILE_ENGINE_HEALTH_ENDPOINT: "http://engine:12000/actuator/health"
+      POSTGRAPHILE_ENGINE_HEALTH_TIMEOUT_SECONDS: 250
+    ports:
+      - "15000:15000"
+    depends_on:
+      engine-db:
+        condition: service_started
+      keycloak-provisioning:
+        condition: service_completed_successfully
+
+  engine-db:
+    image: postgres:14.4-alpine
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: engine
+      POSTGRES_USER: sbp
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+
+  keycloak-provisioning:
+    image: ghcr.io/noumenadigital/sbp-dxd/keycloak-provisioning:latest
+    build:
+      context: keycloak-provisioning
+    command: /local.sh
+    environment:
+      TF_VAR_default_password: ${SBP_TEST_USERS_PASSWORD:-sbp}
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:19.0.0
+    command: start --hostname-strict=false --hostname-strict-https=false --health-enabled=true --http-enabled=true --metrics-enabled=true --db=postgres
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Sbp123!
+      KC_DB_URL: jdbc:postgresql://keycloak-db/postgres
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: testing
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: 11000
+      KC_HOSTNAME: keycloak
+    ports:
+      - "11000:11000"
+    healthcheck:
+      test: curl -s localhost:11000/health || exit 1
+      interval: 1s
+      retries: 60
+    depends_on:
+      keycloak-db:
+        condition: service_started
+
+  keycloak-db:
+    image: postgres:14.4-alpine
+    mem_limit: 256m
+    ports:
+      - "11040:5432"
+    volumes:
+      - keycloak-db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: testing
+
+  frontend:
+    image: ghcr.io/noumenadigital/sbp-dxd/frontend:latest
+    build:
+      context: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_started

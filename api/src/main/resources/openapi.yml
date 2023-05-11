@@ -1,0 +1,1250 @@
+openapi: 3.0.3
+info:
+  title: Project SBP Data OpenAPI Spec
+  description: Project SBP Data OpenAPI Spec
+  version: 1.0.0
+  license:
+    name: Apache License Version 2.0
+    url: http://www.apache.org/licenses/
+
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /sbp/auth/login:
+    post:
+      summary: Log in to SBP API
+      operationId: login
+      tags:
+        - Authentication
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - password
+                username:
+                  type: string
+                  example: 'buyer'
+                password:
+                  type: string
+                  example: 'sbp'
+              required:
+                - grant_type
+                - username
+                - password
+      responses:
+        200:
+          description: Access token to use as Bearer auth in subsequent requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessToken'
+        400:
+          $ref: '#/components/responses/oauth400'
+        401:
+          $ref: '#/components/responses/oauth401'
+        500:
+          $ref: '#/components/responses/500'
+
+  /sbp/auth/refresh:
+    post:
+      summary: Obtain a new access token after expiry
+      operationId: refresh
+      tags:
+        - Authentication
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - refresh_token
+                refresh_token:
+                  type: string
+                  example: "verylong.refresh.token"
+              required:
+                - grant_type
+                - refresh_token
+      responses:
+        200:
+          description: Access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessToken'
+        400:
+          $ref: '#/components/responses/oauth400'
+        401:
+          $ref: '#/components/responses/oauth401'
+        500:
+          $ref: '#/components/responses/oauth500'
+
+  /sbp/auth/logout:
+    post:
+      summary: Invalidate a previous login
+      operationId: logout
+      tags:
+        - Authentication
+      responses:
+        200:
+          description: Log out succeeded
+        500:
+          $ref: '#/components/responses/500'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  example: "verylong.refresh.token"
+              required:
+                - refresh_token
+
+  /sbp/api/v1/me:
+    get:
+      summary: Get logged in user data
+      operationId: getLoggedInUser
+      tags:
+        - User
+      responses:
+        200:
+          description: Fetched logged in user data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDetails"
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+
+  /sbp/api/v1/user:
+    post:
+      summary: Create a user
+      operationId: createUser
+      tags:
+        - User
+      requestBody:
+        description: Representation of user details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateModel'
+        required: true
+      responses:
+        200:
+          description: User has been created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetails'
+        400:
+          $ref: '#/components/responses/400'
+
+  /sbp/api/v1/invoices:
+    post:
+      summary: Create an invoice for a particular supplier
+      operationId: createInvoice
+      tags:
+        - Invoice
+      requestBody:
+        description: Create a new invoice for a particular supplier
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceRequest'
+        required: true
+      responses:
+        201:
+          description: An invoice for the supplier has been created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        400:
+          # openapi generator does not work with oneOf
+          $ref: '#/components/schemas/ValidationErrors'
+        401:
+          $ref: '#/components/responses/401'
+    get:
+      summary: Retrieves all non-contract related invoices for a supplier
+      operationId: getInvoices
+      tags:
+        - Invoice
+      responses:
+        200:
+          description: Fetched invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicesResponse"
+
+  /sbp/api/v1/invoices/{invoice_uuid}:
+    get:
+      summary: Retrieves invoice by ID
+      operationId: getInvoice
+      tags:
+        - Invoice
+      parameters:
+        - name: invoice_uuid
+          in: path
+          description: The uuid of the invoice
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/invoices/verify:
+    post:
+      summary: Performs an internal verification of an invoice
+      operationId: verifyInvoiceInternally
+      tags:
+        - Invoice
+      requestBody:
+        description: Send relevant invoice data for verification
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceVerificationRequest'
+      responses:
+        200:
+          description: Invoice verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /sbp/api/v1/contracts:
+    post:
+      summary: Create an contract for a particular supplier
+      operationId: createContract
+      tags:
+        - Contract
+      requestBody:
+        description: Contract details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractRequest'
+        required: true
+      responses:
+        201:
+          description: An contract for the supplier has been created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+        400:
+          $ref: '#/components/schemas/ValidationErrors'
+        401:
+          $ref: '#/components/responses/401'
+    get:
+      summary: Retrieves all contracts for a supplier
+      operationId: getContracts
+      tags:
+        - Contract
+      responses:
+        200:
+          description: Fetched invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractsResponse"
+
+  /sbp/api/v1/contracts/{contract_uuid}:
+    get:
+      summary: Retrieves contract by ID
+      operationId: getContract
+      tags:
+        - Contract
+      parameters:
+        - name: contract_uuid
+          in: path
+          description: The uuid of the contract
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Contract Details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/contracts/{contract_uuid}/sign:
+    post:
+      summary: Sign contract
+      operationId: signContract
+      tags:
+        - Contract
+      parameters:
+        - name: contract_uuid
+          in: path
+          description: The uuid of the contract
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Contract Details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/contracts/{contract_uuid}/milestones/{milestone_uuid}:
+    get:
+      summary: Retrieves milestone for contract by ID
+      operationId: getMilestone
+      tags:
+        - Contract
+      parameters:
+        - name: contract_uuid
+          in: path
+          description: The uuid of the contract
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: milestone_uuid
+          in: path
+          description: The uuid of the milestone
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Milestone Details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpandedMilestoneResponse"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/contracts/{contract_uuid}/milestones/{milestone_uuid}/close:
+    post:
+      summary: Close milestone
+      operationId: closeMilestone
+      tags:
+        - Contract
+      parameters:
+        - name: contract_uuid
+          in: path
+          description: The uuid of the contract
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: milestone_uuid
+          in: path
+          description: The uuid of the milestone
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Milestone Details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MilestoneResponse"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/contracts/{contract_uuid}/milestones/{milestone_uuid}/offerPrice:
+    put:
+      summary: Update offer price for milestone
+      operationId: updateOfferPriceMilestone
+      tags:
+        - Contract
+      parameters:
+        - name: contract_uuid
+          in: path
+          description: The uuid of the contract
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: milestone_uuid
+          in: path
+          description: The uuid of the milestone
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Offer price details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferPriceDetails'
+        required: true
+      responses:
+        204:
+          description: The offer price is successfully updated
+        400:
+          $ref: '#/components/schemas/ValidationErrors'
+        401:
+          $ref: '#/components/responses/401'
+
+  /sbp/api/v1/offers/marketplace:
+    get:
+      summary: Fetch marketplace offers
+      operationId: getMarketplaceOffers
+      tags:
+        - Offer
+      responses:
+        200:
+          description: Fetched marketplace offers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OffersResponse"
+
+  /sbp/api/v1/offers/{offer_uuid}:
+    get:
+      summary: Fetch offer by id
+      operationId: getOfferById
+      tags:
+        - Offer
+      parameters:
+        - name: offer_uuid
+          in: path
+          description: The uuid of the offer
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfferResponse"
+        403:
+          $ref: "#/components/responses/403"
+        404:
+          $ref: '#/components/responses/404'
+
+  /sbp/api/v1/offers/issuedOffers:
+    get:
+      summary: Fetch my issued offers
+      operationId: getMyIssuedOffers
+      tags:
+        - Offer
+      responses:
+        200:
+          description: Fetched issued offers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OffersResponse"
+
+  /sbp/api/v1/offers/portfolio:
+    get:
+      summary: Fetch buyer portfolio
+      operationId: getMyBoughtOffers
+      tags:
+        - Offer
+      responses:
+        200:
+          description: Fetches offers bought by the logged in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OffersResponse"
+
+  /sbp/api/v1/offers/{offer_uuid}/buy:
+    post:
+      summary: Buy offer
+      operationId: buyOffer
+      tags:
+        - Offer
+      parameters:
+        - name: offer_uuid
+          in: path
+          description: The uuid of the offer
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Buy successful
+          content:
+            application/json:
+              schema:
+                properties:
+                  originalInvoiceId:
+                    type: string
+                    format: uuid
+
+  /sbp/api/v1/offers/{offer_uuid}/offerPrice:
+    patch:
+      summary: Update offer price
+      operationId: updateOfferPrice
+      tags:
+        - Offer
+      parameters:
+        - name: offer_uuid
+          in: path
+          description: The uuid of the offer
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Offer price details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferPriceDetails'
+        required: true
+      responses:
+        204:
+          description: The offer price is successfully updated
+        400:
+          $ref: '#/components/schemas/ValidationErrors'
+        401:
+          $ref: '#/components/responses/401'
+
+  /sbp/api/v1/casper/addDelegate:
+    post:
+      summary: Add delegate to supplier did
+      operationId: addDelegate
+      tags:
+        - Casper
+      requestBody:
+        description: Representation of user details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDelegateDetails'
+        required: true
+      responses:
+        200:
+          description: Delegate has been added
+          content:
+            application/json:
+              schema:
+                properties:
+                  deployHash:
+                    type: string
+        400:
+          $ref: '#/components/responses/400'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        401:
+          $ref: '#/components/responses/oauth401'
+        500:
+          $ref: '#/components/responses/oauth500'
+
+components:
+  securitySchemes:
+    auth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AnyValue: { }
+
+    InvoiceRequest:
+      description: Request data for invoice generation
+      type: object
+      required:
+        - invoiceNumber
+        - amount
+        - creditorData
+        - debtorData
+        - issueDateTime
+        - deadline
+        - freeTextDescription
+        - toBeTraded
+        - description
+      properties:
+        invoiceNumber:
+          type: string
+        amount:
+          $ref: "#/components/schemas/Amount"
+        creditorData:
+          $ref: "#/components/schemas/CreditorData"
+        debtorData:
+          $ref: "#/components/schemas/DebtorData"
+        issueDateTime:
+          type: string
+          format: date-time
+        deadline:
+          type: string
+          format: date-time
+        freeTextDescription:
+          type: string
+        toBeTraded:
+          type: boolean
+        offerAmount:
+          $ref: "#/components/schemas/Amount"
+    InvoicesResponse:
+      description: List of invoices
+      type: object
+      properties:
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceResponse"
+
+    InvoiceResponse:
+      description: Invoice representation
+      type: object
+      required:
+        - toBeTraded
+      properties:
+        uuid:
+          description: Unique identifier of an invoice protocol
+          type: string
+          format: uuid
+        milestone:
+          $ref: "#/components/schemas/MilestoneResponse"
+        invoiceNumber:
+          type: string
+        amount:
+          $ref: "#/components/schemas/Amount"
+        creditorData:
+          $ref: "#/components/schemas/CreditorData"
+        debtorData:
+          $ref: "#/components/schemas/DebtorData"
+        issueDateTime:
+          type: string
+          format: date-time
+        deadline:
+          type: string
+          format: date-time
+        freeTextDescription:
+          type: string
+        toBeTraded:
+          type: boolean
+        offerAmount:
+          $ref: "#/components/schemas/Amount"
+        blockchainReference:
+          type: string
+        invoiceStatus:
+          $ref: '#/components/schemas/InvoiceStatus'
+
+    InvoiceStatus:
+      type: string
+      enum:
+        - created
+        - finalised
+        - traded
+        - paid
+        - breached
+
+    InvoiceVerificationData:
+      description: Relevant invoice data for internal verification
+      type: object
+      properties:
+        invoice_number:
+          type: number
+          format: int32
+        issue_date:
+          type: string
+        bc_id:
+          type: string
+
+    InvoiceVerificationRequest:
+      description: Send relevant invoice data for verification
+      type: object
+      properties:
+        type:
+          type: string
+        base64EncodedFile:
+          type: string
+          format: base64
+
+    ContractRequest:
+      description: Request data for contract generation
+      type: object
+      required:
+        - id
+        - ccy
+        - name
+        - creationDate
+        - goodsValue
+        - customerDetails
+        - expectedDeliveryDate
+        - milestones
+      properties:
+        id:
+          type: string
+        ccy:
+          type: string
+        name:
+          type: string
+        creationDate:
+          type: string
+          format: date-time
+        goodsValue:
+          $ref: "#/components/schemas/Amount"
+        customerDetails:
+          $ref: "#/components/schemas/DebtorData"
+        expectedDeliveryDate:
+          type: string
+          format: date-time
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/MilestoneRequest"
+
+    ContractsResponse:
+      description: List of invoices
+      type: object
+      properties:
+        contracts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractResponse"
+
+    ContractResponse:
+      description: Contract representation
+      type: object
+      properties:
+        uuid:
+          description: Unique identifier of an contract protocol
+          type: string
+          format: uuid
+        status:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        creationDate:
+          type: string
+          format: date-time
+        goodsValue:
+          $ref: "#/components/schemas/Amount"
+        goodsType:
+          type: string
+        goodsQuantity:
+          type: integer
+        shipmentWeightKg:
+          type: number
+        customerDetails:
+          $ref: "#/components/schemas/DebtorData"
+        supplierDetails:
+          $ref: "#/components/schemas/UserDetails"
+        goodsExpirationDate:
+          type: string
+          format: date-time
+        expectedDeliveryDate:
+          type: string
+          format: date-time
+        signDate:
+          type: string
+          format: date-time
+        completionPercentage:
+          type: integer
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/MilestoneResponse"
+
+    MilestoneRequest:
+      description: Request data for milestone generation
+      type: object
+      required:
+        - name
+        - amount
+        - toBeTraded
+        - paymentPeriod
+        - description
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/Amount"
+        toBeTraded:
+          type: boolean
+        offerAmount:
+          $ref: "#/components/schemas/Amount"
+        paymentPeriod:
+          type: string
+          pattern: "([-+]?)P(?:([-+]?[0-9]+)Y)?(?:([-+]?[0-9]+)M)?(?:([-+]?[0-9]+)W)?(?:([-+]?[0-9]+)D)?"
+          example: "P1Y3M21D"
+          description: "The time from which the invoice needs to be paid upon the milestone being completed"
+
+    MilestoneResponse:
+      description: Milestone representation
+      type: object
+      required:
+        - uuid
+        - details
+      properties:
+        uuid:
+          description: Unique identifier of an milestone protocol
+          type: string
+          format: uuid
+        details:
+          $ref: "#/components/schemas/MilestoneDetails"
+
+    ExpandedMilestoneResponse:
+      description: Milestone representation with additional data
+      type: object
+      properties:
+        uuid:
+          description: Unique identifier of an milestone protocol
+          type: string
+          format: uuid
+        milestoneDetails:
+          $ref: "#/components/schemas/MilestoneDetails"
+        supplierDetails:
+          $ref: "#/components/schemas/UserDetails"
+        customerDetails:
+          $ref: "#/components/schemas/DebtorData"
+        contractDetails:
+          $ref: "#/components/schemas/ReducedContractDetails"
+
+    MilestoneDetails:
+      description: Milestone representation
+      type: object
+      properties:
+        status:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/Amount"
+        toBeTraded:
+          type: boolean
+        offerAmount:
+          $ref: "#/components/schemas/Amount"
+        dateCreated:
+          type: string
+          format: date-time
+        dateCompleted:
+          type: string
+          format: date-time
+        expectedPaymentDate:
+          type: string
+          format: date-time
+        blockchainReference:
+          type: string
+        paymentPeriod:
+          type: string
+          pattern: "([-+]?)P(?:([-+]?[0-9]+)Y)?(?:([-+]?[0-9]+)M)?(?:([-+]?[0-9]+)W)?(?:([-+]?[0-9]+)D)?"
+          example: "P1Y3M21D"
+          description: "The time from which the invoice needs to be paid upon the milestone being completed"
+        originalInvoiceUUID:
+          description: Unique identifier of the created invoice
+          type: string
+          format: uuid
+
+    ReducedContractDetails:
+      description: Reduced contract details needed for milestone response
+      type: object
+      properties:
+        uuid:
+          description: Unique identifier of an contract protocol
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    PaymentDetails:
+      description: Representation of payment details object
+      type: object
+      properties:
+        name:
+          type: string
+        iban:
+          type: string
+        address:
+          type: string
+
+    UserDetails:
+      description: Representation of user details object
+      type: object
+      properties:
+        uuid:
+          description: Unique identifier of the user
+          type: string
+          format: uuid
+        name:
+          type: string
+        surname:
+          type: string
+        mail:
+          type: string
+        details:
+          $ref: "#/components/schemas/PaymentDetails"
+        accountHash:
+          type: string
+
+    UserCreateModel:
+      description: Representation of user details object
+      type: object
+      required:
+        - name
+        - surname
+        - mail
+        - details
+        - accountHash
+        - password
+      properties:
+        name:
+          type: string
+        surname:
+          type: string
+        mail:
+          type: string
+        details:
+          $ref: "#/components/schemas/PaymentDetails"
+        accountHash:
+          type: string
+        password:
+          type: string
+
+    Amount:
+      description: Amount
+      required:
+        - amount
+        - unit
+      type: object
+      properties:
+        amount:
+          type: number
+        unit:
+          type: string
+
+    CreditorData:
+      description: Creditor data
+      type: object
+      required:
+        - iban
+        - name
+        - address
+      properties:
+        iban:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+
+    OfferResponse:
+      description: Offer representation
+      required:
+        - uuid
+        - supplierUUID
+        - invoiceNumber
+        - price
+        - amount
+        - supplierData
+        - debtorData
+        - dateListed
+        - state
+      type: object
+      properties:
+        uuid:
+          description: Unique identifier of an offer protocol
+          type: string
+          format: uuid
+        supplierUUID:
+          description: Unique identifier of the supplier of the offer protocol
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        price:
+          $ref: "#/components/schemas/Amount"
+        amount:
+          $ref: "#/components/schemas/Amount"
+        supplierData:
+          $ref: "#/components/schemas/CreditorData"
+        debtorData:
+          $ref: "#/components/schemas/DebtorData"
+        paymentDeadline:
+          type: string
+          format: date-time
+        blockchainRef:
+          type: string
+        dateListed:
+          type: string
+          format: date-time
+        state:
+          type: string
+
+    OffersResponse:
+      description: List of offers
+      required:
+        - offers
+      type: object
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfferResponse"
+
+    DebtorData:
+      description: Debtor data
+      type: object
+      required:
+        - name
+        - address
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+
+    OfferPriceDetails:
+      description: Offer price data
+      type: object
+      required:
+        - offerPrice
+      properties:
+        offerPrice:
+          $ref: "#/components/schemas/Amount"
+
+    AddDelegateDetails:
+      description: Representation of add delegate request details object
+      type: object
+      required:
+        - contractNamedKey
+        - gas
+        - didOwnerAccountHash
+        - delegateType
+        - delegateAccountHash
+        - validity
+      properties:
+        privateKeyIdentity:
+          type: string
+        publicKeyIdentity:
+          type: string
+        contractNamedKey:
+          type: string
+          example: "did_registry_sbp_v1_contract_hash"
+        gas:
+          type: string
+          example: "3000000000"
+        didOwnerAccountHash:
+          type: string
+          example: "96a8d16f4d00b0cff4b3cabd7fc47235d0593a7050e59396a8a997364dc82580"
+        delegateType:
+          type: string
+          example: "sbp-delegates"
+        delegateAccountHash:
+          type: string
+          example: "ff3e9718e4be9bfa68a9db8a10fe2865448d47b7d6f516c6dbf84f29ff668a04"
+        validity:
+          type: string
+          example: "10000000"
+
+    ValidationErrors:
+      description: List of validation errors
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+
+    ValidationError:
+      description: Validation error with messages
+      type: object
+      properties:
+        field:
+          type: string
+        value:
+          $ref: "#/components/schemas/AnyValue"
+        message:
+          type: string
+
+    AccessToken:
+      description: An AccessToken provides all the required information to make authorized calls and to obtain fresh tokens.
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT token to use for subsequent access.
+          example: "verylong.access.token"
+        token_type:
+          type: string
+          enum:
+            - bearer
+        expires_in:
+          type: integer
+          description: Number of seconds before the token expires
+          example: 1800
+        refresh_token:
+          type: string
+          description: Token to use for obtaining a new access token using the refresh endpoint
+          example: "verylong.refresh.token"
+      required:
+        - access_token
+        - expires_in
+        - refresh_token
+
+    DeployHash:
+      description: Casper Deploy Hash
+      type: object
+      required:
+        - deployHash
+      properties:
+        deployHash:
+          type: string
+
+    ErrorResponse:
+      description: Error response with message only
+      type: object
+      properties:
+        message:
+          type: string
+
+    Error:
+      description: General JSON representation for errors
+      properties:
+        code:
+          description: Unique error code
+          type: string
+          example: "PropertyNotFound"
+        trace:
+          description: Unique code for tracing
+          type: string
+          format: uuid
+          example: "de331408-ca4c-4e3f-9846-c6015c05bab7"
+
+    OAuthError:
+      description: Specific error for oAuth flows
+      properties:
+        error:
+          description: Unique error code
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - invalid_scope
+            - unauthorized_client
+            - unsupported_grant_type
+        error_description:
+          description: Human-readable description
+          type: string
+      required:
+        - error
+        - error_description
+
+  responses:
+    oauth400:
+      description: The oAuth request was invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OAuthError'
+
+    oauth401:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OAuthError'
+
+    oauth500:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OAuthError'
+
+    400:
+      description: Request was invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    401:
+      description: The user's credentials are incorrect.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    403:
+      description: The user does not have access to this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    404:
+      description: The specified object could not be found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    500:
+      description: Internal server error. In most cases the resulting content type will be application/json,
+        but a text/plain response can happen.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+        text/plain:
+          schema:
+            type: string
+            example: OutOfMemory
+
+security:
+  - auth: [ ]

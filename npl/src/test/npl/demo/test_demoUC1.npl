@@ -1,0 +1,49 @@
+package demo
+
+use sbp.Invoice
+use sbp.Participant
+use sbp.SBP
+use support.Amount
+use support.ParticipantFactory
+use support.default
+use support.pSBP
+use support.pSupplier1
+
+@test
+function demoUC1(test: Test) returns Unit -> {
+
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier1: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    // supplier1 add a new invoice that does not want to be traded
+    var invoiceDetails = default().invoiceDetails;
+    var invoice1: Invoice = supplier1.createNewInvoice[pSupplier1](
+        invoiceNumber = invoiceDetails.invoiceNumber,
+        amount = invoiceDetails.amount,
+        creditorData = invoiceDetails.creditorData,
+        debtorData = invoiceDetails.debtorData,
+        deadLine = invoiceDetails.deadLine,
+        issueDate = invoiceDetails.issueDate,
+        freeTextDescription = invoiceDetails.description,
+        toBeTraded = false,
+        offerAmount = optionOf<Amount>()
+    );
+    invoice1.setBlockChainRef[pSBP]("invoiceHash1");
+    invoice1.finaliseInvoice[pSBP]();
+
+    debug("At this point the invoice is sent to the customer");
+
+    // now a customer goes to the public backend page and check the authenticity of the invoice meaning
+    // checks that the data in the platform matches the one in its invoice
+    var verifiedInvoiceResult1 = sbp.verifyAuthenticity[pSBP](default().invoiceDetails.with(deadLine = 2023-10-12T12:00Z));
+    test.assertTrue(verifiedInvoiceResult1, "expected verify invoice result to be true");
+
+    // the customer triggers the payment and we receive the notification that it happened
+    invoice1.pay[pSBP]();
+
+    var verifiedInvoiceResult2 = sbp.verifyAuthenticity[pSBP](default().invoiceDetails.with(deadLine = 2025-10-12T12:00Z));
+    test.assertFalse(verifiedInvoiceResult2, "expected verify invoice result to be false");
+};

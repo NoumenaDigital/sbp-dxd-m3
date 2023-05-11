@@ -1,0 +1,52 @@
+package sbp
+
+use support.Amount
+use support.ParticipantFactory
+use support.default
+use support.pSBP
+use support.pSupplier1
+
+@test
+function testInvoiceDuplication(test: Test) returns Unit -> {
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier1: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    //supplier1 add a new invoice that does not want to be traded
+    var invoiceDetails = default().invoiceDetails;
+    var _ = supplier1.createNewInvoice[pSupplier1](
+        invoiceNumber = invoiceDetails.invoiceNumber,
+        amount = invoiceDetails.amount,
+        creditorData = invoiceDetails.creditorData,
+        debtorData = invoiceDetails.debtorData,
+        deadLine = invoiceDetails.deadLine,
+        issueDate = invoiceDetails.issueDate,
+        freeTextDescription = invoiceDetails.description,
+        toBeTraded = false,
+        offerAmount = optionOf<Amount>()
+    );
+
+    var failMsg: Text = test.assertFailsWith(
+        function() returns Invoice -> supplier1.createNewInvoice[pSupplier1](
+            invoiceNumber = invoiceDetails.invoiceNumber,
+            amount = invoiceDetails.amount,
+            creditorData = invoiceDetails.creditorData,
+            debtorData = invoiceDetails.debtorData,
+            deadLine = invoiceDetails.deadLine,
+            issueDate = invoiceDetails.issueDate,
+            freeTextDescription = invoiceDetails.description,
+            toBeTraded = false,
+            offerAmount = optionOf<Amount>()
+        ),
+        14,
+        "This invoice has already been added and can thus not be added again"
+    );
+
+    test.assertEquals(
+        "R14: Assertion 'This invoice has already been added to the system' failed ('/sbp/Invoice<creation>/This invoice has already been added to the system')",
+        failMsg,
+        "unexpected error message"
+    );
+};

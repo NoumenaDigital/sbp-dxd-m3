@@ -1,0 +1,70 @@
+package sbp
+
+use support.Amount
+use support.CCY
+use support.CustomerDetails
+use support.PaymentDetails
+
+// This protocol represents a contract.
+// A contract is an agreement that a supplier provides goods to a customer at a particular time (expectedDeliveryDate)
+// There may be one or more Milestones associated with a contract.
+protocol[pSupplier, pSBP] Contract(
+    var id: Text,
+    var contractCCY: CCY,
+    var name: Text,
+    var creationDate: DateTime,
+    var goodsValue: Amount,
+    var customerDetails: CustomerDetails,
+    var expectedDeliveryDate: DateTime,
+    var supplier: Participant,
+    var milestones: List<Milestone>
+) {
+    guard(goodsValue.ccy == contractCCY, "The goodsValue needs to be the same as the contractCCY");
+    guard(milestones.isNotEmpty(), "At least one milestone needs to be associated to the contract.");
+    guard(creationDate.isBefore(expectedDeliveryDate, true), "Creation date must be before expected delivery date");
+
+    init {
+        supplier.registerContract[pSupplier](this);
+        for (m in milestones) { m.registerContract[pSupplier](this); }
+    };
+
+    var supplierDetails: PaymentDetails = supplier.paymentDetails;
+    var signDate: Option<DateTime> = optionOf<DateTime>();
+
+    initial state createdBySupplier;
+    state creationFinalised;
+    final state closed;
+
+    permission[pSupplier] addMilestone(
+        name: Text,
+        amount: Amount,
+        description: Text,
+        timeToPay: Period,
+        invoiceToTrade: Boolean,
+        offerAmount: Option<Amount>,
+        dateCreated: DateTime
+    ) | createdBySupplier {
+
+        var m: Milestone = Milestone[pSupplier, pSBP](
+            name,
+            amount,
+            description,
+            timeToPay,
+            invoiceToTrade,
+            offerAmount,
+            dateCreated
+        );
+
+        milestones = milestones.with(m);
+    };
+
+    @api
+    permission[pSupplier] finaliseCreation(signDate: DateTime) | createdBySupplier {
+        this.signDate = optionOf(signDate);
+        become creationFinalised;
+    };
+
+    permission[pSBP | pSupplier] closeContract() {
+        become closed;
+    };
+};

@@ -1,0 +1,170 @@
+package sbp
+
+use support.Amount
+use support.CCY
+use support.CustomerDetails
+use support.MilestoneDetails
+use support.PaymentDetails
+
+// This protocol represents a user.
+// A user may create invoices and contracts and buy other user's offers.
+// Users may be usefully queried for offers bought, invoices issued and contract created.
+@api
+protocol[pSBP, pParticipant] Participant(
+    var name: Text,
+    var surname: Text,
+    var mail: Text,
+    var paymentDetails: PaymentDetails,
+    var sbp: SBP,
+    var accountHash: Text
+) {
+    var boughtOffers: Set<Offer> = setOf<Offer>();
+
+    var issuedInvoices: Set<Invoice> = setOf<Invoice>();
+    var contracts: Set<Contract> = setOf<Contract>();
+    var trackRecord: Number = 0.9;
+    var tradeAllInvoices: Boolean = false;
+
+    init {
+        sbp.addParticipant[pSBP](this);
+    };
+
+    permission[pParticipant] registerBoughtOffer(offer: Offer) {
+        boughtOffers = boughtOffers.with(offer);
+    }
+
+    @api
+    permission[pParticipant] returnMyBoughtOffers() returns Set<Offer> {
+        return boughtOffers;
+    };
+
+    @api
+    permission[pParticipant] buyOffer(offer: Offer) {
+        offer.becomeAssigned[pSBP](this);
+        offer.becomePaid[pSBP]();
+    };
+
+    permission[pSBP] setBuyerOnOffer(offer: Offer) {
+        offer.setBuyer[pParticipant]();
+    }
+
+    // User enters all the contract data manually
+    @api
+    permission[pParticipant] createContract(
+        id: Text,
+        ccy: CCY,
+        contractName: Text,
+        creationDate: DateTime,
+        goodsValue: Amount,
+        milestones: List<MilestoneDetails>,
+        customerDetails: CustomerDetails,
+        expectedDeliveryDate: DateTime
+    ) returns Contract {
+        guard(milestones.allMatch(function(m: MilestoneDetails) returns Boolean -> { return m.amount.ccy == ccy; }),
+            "All Milestones must have the same currency as the contract");
+        guard(milestones.allMatch(function(m: MilestoneDetails) returns Boolean -> { return m.offerAmount.getOrElse(Amount(0, ccy)).ccy == ccy; }),
+            "The offerAmounts must have the same currency as the contract");
+        guard(milestones.map(function(m: MilestoneDetails) returns Number -> m.amount.amount).sum() == goodsValue.amount,
+            "Goods value is not properly split in milestones.");
+
+        var milestoneList: List<Milestone> = milestones.map(function(m: MilestoneDetails) returns Milestone -> {
+            return Milestone[pParticipant, pSBP](m.name, m.amount, m.description, m.timeToPay, m.invoiceToTrade, m.offerAmount, m.dateCreated);
+        });
+
+        return Contract[pParticipant, pSBP](
+            id,
+            ccy,
+            contractName,
+            creationDate,
+            goodsValue,
+            customerDetails,
+            expectedDeliveryDate,
+            this,
+            milestoneList
+        );
+    };
+
+    permission[pSBP] updateTrackRecord(tr: Number) {
+        trackRecord = tr;
+    };
+
+    permission[pParticipant] registerContract(contract: Contract) {
+        contracts = contracts.with(contract);
+    };
+
+    function checkCreditorMatchesSupplier(creditorData: PaymentDetails) returns Boolean -> {
+        return (this.paymentDetails.iban == creditorData.iban &&
+            this.paymentDetails.address == creditorData.address &&
+            this.paymentDetails.name == creditorData.name);
+    };
+
+    // Creates an independent invoice i.e. one that is not related to a contract
+    @api
+    permission[pParticipant] createNewInvoice(
+        invoiceNumber: Text,
+        amount: Amount,
+        creditorData: PaymentDetails,
+        debtorData: CustomerDetails,
+        deadLine: DateTime,
+        issueDate: DateTime,
+        freeTextDescription: Text,
+        toBeTraded: Boolean,
+        offerAmount: Option<Amount>
+    ) returns Invoice {
+        guard(checkCreditorMatchesSupplier(creditorData), "creditor details in the invoice do not match supplier ones");
+
+        return Invoice[pSBP, pParticipant](
+            optionOf<Milestone>(),
+            this,
+            invoiceNumber,
+            amount,
+            creditorData,
+            debtorData,
+            deadLine,
+            issueDate,
+            (toBeTraded || tradeAllInvoices),
+            offerAmount,
+            freeTextDescription
+        );
+    };
+
+    permission[pParticipant] registerNewInvoice(i: Invoice) {
+        issuedInvoices = issuedInvoices.with(i);
+    };
+
+    @api
+    permission[pParticipant | pSBP] returnMyIssuedOffers() returns Set<Offer> {
+        return issuedInvoices
+            .filter(isInvoiceOfferPresent)
+            .map(getInvoiceOffer)
+            .toSet();
+    };
+
+    function isInvoiceOfferPresent(invoice: Invoice) returns Boolean -> {
+        return invoice.offer.isPresent();
+    };
+
+    function getInvoiceOffer(invoice: Invoice) returns Offer -> {
+        return invoice.offer.getOrFail();
+    };
+
+    @api
+    permission[pParticipant] returnMyIssuedInvoices() returns Set<Invoice> {
+        return issuedInvoices;
+    };
+
+    @api
+    permission[pParticipant] returnMyContracts() returns Set<Contract> {
+        return contracts;
+    };
+
+    @api
+    permission[pParticipant] updateOfferPrice(offer: Offer, newOfferAmount: Number) {
+        guard(offer.currentState == offer.states.open, "Offer is not in an open state.");
+        guard(
+            this.paymentDetails.iban == offer.originalInvoice.supplier.paymentDetails.iban,
+            "Offer does not belong to the supplier."
+        );
+        offer.updateOfferAmount[pSBP](newOfferAmount);
+    };
+};

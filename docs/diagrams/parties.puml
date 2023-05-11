@@ -1,0 +1,49 @@
+@startuml
+
+left to right direction
+
+actor Supplier as supp
+actor Recipient as cust
+actor Buyer as buyer
+
+node "Smart Billing Platform" as sbp
+
+package "Verification" as uc1 {
+    usecase "Create verifiable invoice" as uc1.1
+    usecase "Verify verifiable invoice\nthrough Smart Billing Platform" as uc1.2
+    usecase "Verify verifiable invoice\non IPFS" as uc1.3
+}
+
+supp --> uc1.1
+cust --> uc1.2
+cust --> uc1.3
+
+uc1.1 <-- sbp
+uc1.2 <-- sbp
+
+
+package "Smart Billing" as uc2 {
+    usecase "Sign Smart Billing Contract" as uc2.1
+    usecase "Track milestones" as uc2.2
+}
+
+supp --> uc2.1
+cust ..> uc2.1
+
+uc2.2 <.. sbp
+
+package "Trading" as uc3 {
+    usecase "Create sales offer" as uc3.1
+    usecase "Buy invoice" as uc3.2
+    usecase "Redeem invoice" as uc3.3 
+}
+
+supp --> uc3.1
+buyer --> uc3.2
+buyer --> uc3.3 
+
+uc3.1 <-- sbp
+uc3.2 <-- sbp
+uc3.3 <-- sbp
+
+@enduml 

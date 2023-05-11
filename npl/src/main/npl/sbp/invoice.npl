@@ -1,0 +1,73 @@
+package sbp
+
+use support.Amount
+use support.CustomerDetails
+use support.InvoiceDetails
+use support.PaymentDetails
+
+// This protocol represents an Invoice
+// An Invoice is a request for payment for a particular milestone
+protocol[pSBP, pSupplier] Invoice(
+    var milestone: Option<Milestone>,
+    var supplier: Participant,
+    var invoiceNumber: Text,
+    var amount: Amount,
+    var creditorData: PaymentDetails,
+    var debtorData: CustomerDetails,
+    var deadline: DateTime,
+    var issueDate: DateTime,
+    var toBeTraded: Boolean,
+    var offerAmount: Option<Amount>,
+    var freeTextDescription: Text
+) {
+    guard((offerAmount.isPresent() && offerAmount.getOrFail().ccy == amount.ccy) || !offerAmount.isPresent(),
+        "If the offerAmount is present, it's currency must be the same as that of the amount");
+    guard(!supplier.sbp.verifyAuthenticity[pSBP](InvoiceDetails(invoiceNumber, amount, creditorData, debtorData, deadline, issueDate, freeTextDescription, optionOf<Text>())),
+        "This invoice has already been added to the system");
+    guard(invoiceNumber.length() > 0, "Invoice number is required.");
+    guard(issueDate.isBefore(deadline, true), "The Invoice should be issued before it is due");
+
+    var blockchainRef: Option<Text> = optionOf<Text>();
+    var offer: Option<Offer> = optionOf<Offer>();
+
+    initial state created;
+    state finalised;
+    state traded;
+    final state paid;
+
+    init {
+        supplier.registerNewInvoice[pSupplier](this);
+    };
+
+    @api
+    permission[pSBP | pSupplier] getOffer() returns Option<Offer> {
+        return offer;
+    };
+
+    @api
+    permission[pSBP] setBlockChainRef(ref: Text) | created {
+        blockchainRef = optionOf(ref);
+    };
+
+    @api
+    permission[pSBP] finaliseInvoice() | created {
+        if (toBeTraded == true) { this.createOffer[pSBP](); };
+        become finalised;
+    };
+
+    permission[pSBP] createOffer() {
+        guard(!offer.isPresent(),
+            "no offer can be created if there is already an open, assigned or bought one.");
+        offer = optionOf(Offer[pSupplier, pSupplier, pSBP](this, supplier));
+        become traded;
+    };
+
+    permission[pSBP] pay() | finalised, traded {
+        if (milestone.isPresent() && toBeTraded == false) {
+            milestone.getOrFail().closeMilestone[pSBP]();
+        };
+        // TrackRecord function to be defined depending on the specific use case
+        supplier.updateTrackRecord[pSBP](supplier.trackRecord * (1 + 0.05));
+        become paid;
+    };
+};

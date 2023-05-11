@@ -1,0 +1,54 @@
+package sbp
+
+use support.Amount
+use support.ParticipantFactory
+use support.default
+use support.pSBP
+use support.pSupplier1
+
+@test
+function test_SupplierReturnOffers(test: Test) returns Unit -> {
+    // given
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    var invoiceDetails = default().invoiceDetails;
+    var invoice1: Invoice = supplier.createNewInvoice[pSupplier1](
+        invoiceNumber = invoiceDetails.invoiceNumber,
+        amount = invoiceDetails.amount,
+        creditorData = invoiceDetails.creditorData,
+        debtorData = invoiceDetails.debtorData,
+        deadLine = invoiceDetails.deadLine,
+        issueDate = invoiceDetails.issueDate,
+        freeTextDescription = invoiceDetails.description,
+        toBeTraded = true,
+        offerAmount = optionOf<Amount>()
+    );
+    invoice1.setBlockChainRef[pSBP]("invoiceHash1");
+    invoice1.finaliseInvoice[pSBP]();
+
+    var invoice2: Invoice = supplier.createNewInvoice[pSupplier1](
+        invoiceNumber = invoiceDetails.invoiceNumber,
+        amount = invoiceDetails.amount,
+        creditorData = invoiceDetails.creditorData,
+        debtorData = invoiceDetails.debtorData,
+        deadLine = invoiceDetails.deadLine.plus(days(1)),
+        issueDate = invoiceDetails.issueDate,
+        freeTextDescription = invoiceDetails.description,
+        toBeTraded = true,
+        offerAmount = optionOf<Amount>()
+    );
+    invoice2.setBlockChainRef[pSBP]("invoiceHash1");
+    invoice2.finaliseInvoice[pSBP]();
+
+    // when
+    var issuedOffers: Set<Offer> = supplier.returnMyIssuedOffers[pSBP]();
+
+    // then
+    test.assertEquals(2, issuedOffers.size(), "Both offers are returned for the supplier");
+    test.assertTrue(issuedOffers.contains(invoice1.offer.getOrFail()), "The Offer from invoice1 has been found");
+    test.assertTrue(issuedOffers.contains(invoice2.offer.getOrFail()), "The offer from invoice2 has been found");
+};

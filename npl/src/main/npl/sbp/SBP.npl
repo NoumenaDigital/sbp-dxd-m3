@@ -1,0 +1,61 @@
+package sbp
+
+use support.InvoiceDetails
+use support.PaymentDetails
+
+// This protocol represents a central repostiory of participants.
+// Invoices may be verified using the verifyAuthenticity permission.
+@api
+protocol[pSBP] SBP() {
+    var participants: Set<Participant> = setOf<Participant>();
+
+    permission[pSBP] addParticipant(p: Participant) {
+        participants = participants.with(p);
+    };
+
+    @api
+    permission[pSBP] getOpenOffers() returns Set<Offer> {
+        return participants
+            .flatMap(getParticipantInvoiceOffers)
+            .filter(isOfferOpen)
+            .toSet();
+    };
+
+    function getParticipantInvoiceOffers(p: Participant) returns Set<Offer> -> {
+        return p.returnMyIssuedOffers[pSBP]();
+    };
+
+    function isOfferOpen(o: Offer) returns Boolean -> {
+        return o.currentState == o.states.open;
+    };
+
+    @api
+    permission[pSBP] verifyAuthenticity(invoiceDetails: InvoiceDetails) returns Boolean {
+        var supplier = participants
+            .toList()
+            .findFirst(paymentDetailsMatcher(invoiceDetails.creditorData))
+            .getOrFail();
+
+        return supplier.issuedInvoices
+            .filter(invoiceMatcher(invoiceDetails))
+            .size() == 1;
+    };
+
+    function paymentDetailsMatcher(details: PaymentDetails) returns (Participant) -> Boolean -> {
+        return function(p: Participant) returns Boolean -> {
+            return p.paymentDetails == details;
+        };
+    };
+
+    function invoiceMatcher(details: InvoiceDetails) returns (Invoice) -> Boolean -> {
+        return function(i: Invoice) returns Boolean -> {
+            return
+                i.invoiceNumber == details.invoiceNumber &&
+                i.amount == details.amount &&
+                i.creditorData == details.creditorData &&
+                i.debtorData == details.debtorData &&
+                i.deadline == details.deadLine &&
+                i.issueDate == details.issueDate;
+        };
+    };
+};

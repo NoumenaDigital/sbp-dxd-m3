@@ -1,0 +1,67 @@
+package demo
+
+use sbp.Invoice
+use sbp.Offer
+use sbp.Participant
+use sbp.SBP
+use support.Amount
+use support.ParticipantFactory
+use support.default
+use support.pBuyer1
+use support.pSBP
+use support.pSupplier1
+
+@test
+function demoUC1UpdateQueryPrice(test: Test) returns Unit -> {
+
+    var sbp = SBP[pSBP]();
+    var participantFactory = ParticipantFactory[pSBP](sbp);
+
+    var participantDetails = default().participantDetails;
+    var supplier1: Participant = participantFactory.create[pSupplier1](participantDetails.with(name = "Supplier 1"));
+
+    // supplier1 add a new invoice that does not want to be traded
+    var invoiceDetails = default().invoiceDetails;
+    var invoice: Invoice = supplier1.createNewInvoice[pSupplier1](
+        invoiceNumber = invoiceDetails.invoiceNumber,
+        amount = invoiceDetails.amount,
+        creditorData = invoiceDetails.creditorData,
+        debtorData = invoiceDetails.debtorData,
+        deadLine = invoiceDetails.deadLine,
+        issueDate = invoiceDetails.issueDate,
+        freeTextDescription = invoiceDetails.description,
+        toBeTraded = true,
+        offerAmount = optionOf<Amount>()
+    );
+    invoice.setBlockChainRef[pSBP]("invoiceHash1");
+    invoice.finaliseInvoice[pSBP]();
+
+    debug("At this point the tradeable invoice is a part of an offer with the default offer price");
+
+    var offer: Offer = invoice.getOffer[pSupplier1]().getOrFail();
+
+    debug("Before the offer is traded, the offer price can be updated");
+    offer.updateOfferAmount[pSupplier1](9500);
+
+    debug("As soon as the offer is bought, the offer price can no longer be updated");
+    var buyer: Participant = participantFactory.create[pBuyer1](participantDetails.with(name = "Buyer 1"));
+    buyer.buyOffer[pBuyer1](offer);
+
+    var failMsg = test.assertFailsWith(
+        function() -> offer.updateOfferAmount[pSupplier1](9100),
+        13,
+        "unexpected error code"
+    );
+
+    test.assertEquals(
+        "R13: Illegal protocol state: current state 'bought' is not one of 'open'",
+        failMsg,
+        "unexpected error message"
+    );
+
+    test.assertEquals(
+        offer.currentState,
+        offer.states.bought,
+        "offer has been assigned and the offer price cannot be updated"
+    );
+};

@@ -1,0 +1,60 @@
+package sbp
+
+use support.Amount
+
+// This protocol represents an Offer.
+// An Offer is a tradeable asset representing an Invoice.
+// It is the authority to receive payment for an Invoice.
+// It can be bought and sold by Users/Participants.
+protocol[pCreditor, pBuyer, pSBP] Offer(var originalInvoice: Invoice, var supplier: Participant) {
+
+    var amount: Amount = Amount(0, originalInvoice.amount.ccy);
+    var offerBuyer: Option<Participant> = optionOf<Participant>();
+    var paymentDeadline: Option<DateTime> = optionOf<DateTime>();
+    var dateListed = now();
+
+    initial state open;
+    state assigned;
+    state cancelled;
+    final state bought;
+
+    init {
+        // Check if the tradeable invoice had an offer amount set, otherwise compute the offer amount
+        if (originalInvoice.offerAmount.isPresent()) {
+            amount = originalInvoice.offerAmount.getOrFail();
+        } else {
+            amount = computeOfferAmount(originalInvoice);
+        };
+    };
+
+    // Permission to set a new offer amount
+    // Only possible whilst an offer is still open
+    permission[pSBP | pCreditor] updateOfferAmount(newOfferAmount: Number) | open {
+        this.amount = this.amount.with(amount = newOfferAmount);
+    };
+
+    permission[pSBP] becomeAssigned(buyer: Participant) | open {
+        offerBuyer = optionOf<Participant>(buyer);
+        paymentDeadline = optionOf<DateTime>(now().plus(minutes(1))); // we are assuming the buyer has 1 minuts to pay -> it has to be immediate payment
+        buyer.setBuyerOnOffer[pSBP](this); //set buyer as party in the offer
+        buyer.registerBoughtOffer[pBuyer](this);
+        become assigned;
+    };
+
+    permission[pSBP] becomePaid() before paymentDeadline.getOrFail() | assigned {
+        guard(now().isBefore(paymentDeadline.getOrFail(), true), "The offer needs to be paid before the payment deadline");
+        originalInvoice.pay[pSBP]();
+        become bought;
+    };
+
+    permission[*participant] setBuyer() | open {
+        this.pBuyer = participant;
+    };
+
+    function computeOfferAmount(i: Invoice) returns Amount -> {
+        return Amount(
+            i.amount.amount * i.supplier.trackRecord,
+            i.amount.ccy
+        );
+    };
+};
