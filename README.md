@@ -417,7 +417,7 @@ It furthermore provides instructions on how to run the system locally, once a No
 
 The integrated architecture for all 3 use cases is sketched below:
 
-![Parties](docs/diagrams/SBP Architecture.png)
+![Parties](docs/diagrams/SBP_Architecture.png)
 
 It leverages the [Noumena Platform](www.noumenadigital.com) to create an off-chain smart contract based backbone for a Smart 
 Billing Platform prototype. It leverages a smart contract on the Casper Blockchain to delegate the right to sign invoices and 
