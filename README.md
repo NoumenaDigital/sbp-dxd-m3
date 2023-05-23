@@ -647,7 +647,7 @@ DISABLE_CONTRACT_ENDPOINTS=false
 
 ### Start Docker
 Start docker and login with your Github access token,
-(`GITHUB_USER_NAME` and `GITHUB_USER_NAME`) or simply type
+(`GITHUB_USER_NAME` and `GITHUB_USER_PASS`) or simply type
 ```shell
 $ make login
 ```
